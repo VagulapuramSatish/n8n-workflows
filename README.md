@@ -4,8 +4,8 @@ This repository contains an n8n workflow that automatically tracks influential u
 ***Mission***
 Automatically capture when someone with many followers stars your GitHub repository, and store or notify your team for further engagement.
 
-***Prerequisites***
-Before running the workflow, you need:
+***Prerequisites*** :
+  Before running the workflow, you need:
 - n8n instance – self-hosted or cloud.
 - GitHub API token – for fetching stargazer info.
 - OpenRouter API key – for optional AI enrichment or notifications.
@@ -17,7 +17,7 @@ Before running the workflow, you need:
 - Click Import → Paste JSON.
 - Paste the workflow JSON from this repo.
 
-2. Add Credentials
+2. Add Credentials : 
 Before running the workflow, configure these credentials in n8n:
 1. GitHub API Token
 - Go to Settings → Credentials → Create New.
@@ -42,8 +42,8 @@ Before running the workflow, configure these credentials in n8n:
 Turn the workflow ON in n8n.
 Test by starring the repository from an account with high followers to confirm alerts are sent.
 
-***Notes***
-Adjust follower thresholds to fit your target audience.
+***Notes***: 
+ Adjust follower thresholds to fit your target audience.
 Keep credentials secret; never store them in the workflow JSON.
 You can extend this workflow to other platforms like Slack, email, or CRM.
 
