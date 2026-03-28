@@ -1,8 +1,8 @@
 ## High-Value Lead Tracker – GitHub Stars Automation
 This repository contains an n8n workflow that automatically tracks influential users who star a specific GitHub repository. “Influential” is determined by their follower count, so you can identify potential high-value leads efficiently.
 
-***Mission***
-Automatically capture when someone with many followers stars your GitHub repository, and store or notify your team for further engagement.
+***Mission*** : 
+ Automatically capture when someone with many followers stars your GitHub repository, and store or notify your team for further engagement.
 
 ***Prerequisites*** :
   Before running the workflow, you need:
@@ -19,6 +19,7 @@ Automatically capture when someone with many followers stars your GitHub reposit
 
 2. Add Credentials : 
 Before running the workflow, configure these credentials in n8n:
+
 1. GitHub API Token
 - Go to Settings → Credentials → Create New.
 - Select GitHub Personal Access Token.
