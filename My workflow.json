@@ -1,0 +1,427 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "6dbe19fa-7b58-4dfb-be4f-887a5e721147",
+      "name": "Schedule Trigger (Every 15 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.github.com/repos/tiangolo/fastapi/stargazers",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "per_page",
+              "value": "30"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.star+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4a9eec83-4790-4f83-ae4a-21f13df85b14",
+      "name": "Get Recent Stargazers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        96
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "YOUR_GITHUB_ID_HERE",
+          "name": "GitHub account"
+        }
+      },
+      "notes": "Fetches the latest 30 stargazers from the target repository. Uses application/vnd.github.star+json to include starred_at timestamps for filtering new stars only."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter only stars added in the last 15 minutes (matching schedule interval)\nconst fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);\nconst items = $input.all();\nconst newStars = items.filter(item => {\n  const starredAt = new Date(item.json.starred_at);\n  return starredAt >= fifteenMinutesAgo;\n});\nreturn newStars;\n//return [{ json: { user: { login: \"torvalds\" } } }];"
+      },
+      "id": "1b355512-a092-4ecc-a27e-57995826cffb",
+      "name": "Filter New Stars Only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/users/{{ $json.user.login }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "X-GitHub-Api-Version",
+              "value": "2022-11-28"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "e75fe339-1387-4789-9d74-6d04f1892df8",
+      "name": "Enrich: Fetch User Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        672,
+        96
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "YOUR_GITHUB_ID_HERE",
+          "name": "GitHub account"
+        }
+      },
+      "notes": "Fetches the full GitHub user profile. Returns X-RateLimit-Remaining and X-RateLimit-Reset headers for rate limit management."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rate limit guard: read headers from the full response\nconst headers = $json.headers || {};\nconst remaining = parseInt(headers['x-ratelimit-remaining'] || '60', 10);\nconst resetAt = parseInt(headers['x-ratelimit-reset'] || '0', 10) * 1000;\n\nif (remaining <= 5) {\n  // Not enough quota — wait until reset, then stop this item\n  const waitMs = Math.max(0, resetAt - Date.now()) + 2000;\n  await new Promise(r => setTimeout(r, waitMs));\n}\n\n// Add a 1-second polite delay between enrichment calls regardless\nawait new Promise(r => setTimeout(r, 1000));\n\n// Unwrap the actual body for downstream nodes\nreturn [{ json: $json.body }];"
+      },
+      "id": "471b9fc9-a9c4-4661-99e6-06697ec3e863",
+      "name": "Rate Limit Guard + 1s Delay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        96
+      ],
+      "notes": "Reads X-RateLimit-Remaining from response headers. If <= 5 calls remain, waits until the reset window. Always adds a 1-second polite delay to stay well within the 5000 req/hour authenticated limit."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition-followers",
+              "leftValue": "={{ $json.followers }}",
+              "rightValue": 100,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "270959ac-f41b-478d-bb6b-00daf8bb82f2",
+      "name": "Filter: followers > 100",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "notes": "First condition: followers > 100. Passes to output1 (true). Otherwise goes to repos check."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition-repos",
+              "leftValue": "={{ $json.public_repos }}",
+              "rightValue": 50,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "32d53ebe-0b54-4c34-9076-6de7c777970f",
+      "name": "Filter: public_repos > 50",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        192
+      ],
+      "notes": "Second condition (OR branch): public_repos > 50. If both followers and repos fail, the flow stops here."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge both true branches from the two IF nodes into one stream\nreturn $input.all();"
+      },
+      "id": "7ae41d06-6801-4525-add1-e5693bb28e0b",
+      "name": "Merge High-Value Branches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine user data + AI pitch into one clean object\nconst user = $('Merge High-Value Branches').first().json;\nconst pitch = $json.output;\n\nreturn [{\n  json: {\n    content: `**New High-Value Stargazer** ⭐\n\n**${user.name || user.login}** (@${user.login})\n${user.company ? `🏢 ${user.company}` : ''}\n${user.location ? `📍 ${user.location}` : ''}\n👥 ${user.followers.toLocaleString()} followers | 📦 ${user.public_repos} repos\n\n💡 **AI Insight:** ${pitch}\n\n🔗 ${user.html_url}`\n  }\n}];"
+      },
+      "id": "3172067e-bb17-4b2d-9773-71aeb35b3d5a",
+      "name": "Compose Discord Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_DISCORD_WEBHOOK_URL_HERE",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "f309e852-6040-4f47-9c5d-d2f42046957e",
+      "name": "Send to Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2144,
+        96
+      ],
+      "notes": "Replace YOUR_DISCORD_WEBHOOK_URL_HERE with your actual Discord webhook URL from Server Settings > Integrations > Webhooks."
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a concise B2B sales assistant. Given a GitHub user's bio and company, write exactly one compelling sentence explaining why a sales team should reach out to this person. Be specific, professional, and reference their interests or company context. Output ONLY the sentence — no preamble, no bullet points.\n\nName: {{ $json.name || $json.login }}\nCompany: {{ $json.company || \"Not listed\" }}\nBio: {{ $json.bio || \"No bio provided\" }}\nLocation: {{ $json.location || \"Unknown\" }}\nPublic repos: {{ $json.public_repos }}\nFollowers: {{ $json.followers }}",
+        "options": {}
+      },
+      "id": "8d80727d-34fe-41b5-9fbf-846d0b5cda78",
+      "name": "AI: Generate Sales Pitch",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1568,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-3.5-turbo",
+        "options": {
+          "maxTokens": 120,
+          "temperature": 0.7
+        }
+      },
+      "id": "50c5c2df-aa27-4ba7-b0da-37cf97cb675a",
+      "name": "OpenRouter Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1648,
+        320
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "YOUR_OPENROUTER_ID_HERE",
+          "name": "OpenRouter account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger (Every 15 min)": {
+      "main": [
+        [
+          {
+            "node": "Get Recent Stargazers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Stargazers": {
+      "main": [
+        [
+          {
+            "node": "Filter New Stars Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter New Stars Only": {
+      "main": [
+        [
+          {
+            "node": "Enrich: Fetch User Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich: Fetch User Profile": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Guard + 1s Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Guard + 1s Delay": {
+      "main": [
+        [
+          {
+            "node": "Filter: followers > 100",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter: public_repos > 50",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: followers > 100": {
+      "main": [
+        [
+          {
+            "node": "Merge High-Value Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: public_repos > 50": {
+      "main": [
+        [
+          {
+            "node": "Merge High-Value Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge High-Value Branches": {
+      "main": [
+        [
+          {
+            "node": "AI: Generate Sales Pitch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Discord Payload": {
+      "main": [
+        [
+          {
+            "node": "Send to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Generate Sales Pitch": {
+      "main": [
+        [
+          {
+            "node": "Compose Discord Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI: Generate Sales Pitch",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e77602c1-8f0f-470a-9de0-52cd1e34d10f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "84addbfb56eb9559290b6f26bfd2f205cedb519d2ef11af05cd2cad51ef277fe"
+  },
+  "id": "wrMmzCuZbfAaF6bW",
+  "tags": []
+}
